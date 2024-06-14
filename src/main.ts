@@ -19,20 +19,31 @@ async function runWithRetryAndTimeout(maxAttempts: number, timeout: number, buil
   let error = null;
 
   while (currentAttempt < maxAttempts) {
-    if (timeout > 0) {
+      core.info(`Attempting ${currentAttempt + 1}/${maxAttempts}`);
       try {
-        await Promise.race([
-          Exec.getExecOutput(buildCmd.command, buildCmd.args, {
-            ignoreReturnCode: true
-          }).then(res => {
-            if (res.stderr.length > 0 && res.exitCode != 0) {
-              throw new Error(`buildx failed with: ${res.stderr.match(/(.*)\s*$/)?.[0]?.trim() ?? 'unknown error'}`);
-            }
-          }),
-          new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), timeout))
-        ]);
-        error = null;
+        if (timeout > 0) {
+          await Promise.race([
+            Exec.getExecOutput(buildCmd.command, buildCmd.args, {
+              ignoreReturnCode: true
+            }).then(res => {
+              if (res.stderr.length > 0 && res.exitCode != 0) {
+                throw new Error(`buildx failed with: ${res.stderr.match(/(.*)\s*$/)?.[0]?.trim() ?? 'unknown error'}`);
+              }
+            }),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), timeout))
+          ]);
+          error = null;
+        } else {
+          await Exec.getExecOutput(buildCmd.command, buildCmd.args, {
+              ignoreReturnCode: true
+            }).then(res => {
+              if (res.stderr.length > 0 && res.exitCode != 0) {
+                throw new Error(`buildx failed with: ${res.stderr.match(/(.*)\s*$/)?.[0]?.trim() ?? 'unknown error'}`);
+              }
+            });
+        }
       } catch (err) {
+        core.info("failed: " + err);
         error = err;
       }
     }

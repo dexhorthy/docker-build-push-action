@@ -108,6 +108,15 @@ inputs:
     description: "GitHub Token used to authenticate against a repository for Git context"
     default: ${{ github.token }}
     required: false
+  timeout-ms:
+    description: "Timeout in milliseconds"
+    default: "-1"
+    required: false
+  max-attempts:
+    description: "Maximum number of attempts"
+    default: "1"
+    required: false
+
 
 outputs:
   imageid:

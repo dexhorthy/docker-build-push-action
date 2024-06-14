@@ -14,6 +14,39 @@ import {ConfigFile} from '@docker/actions-toolkit/lib/types/docker/docker';
 
 import * as context from './context';
 
+async function runWithRetryAndTimeout(maxAttempts: number, timeout: number, buildCmd) {
+  let currentAttempt = 0;
+  let error = null;
+
+  while (currentAttempt < maxAttempts) {
+    if (timeout > 0) {
+      try {
+        await Promise.race([
+          Exec.getExecOutput(buildCmd.command, buildCmd.args, {
+            ignoreReturnCode: true
+          }).then(res => {
+            if (res.stderr.length > 0 && res.exitCode != 0) {
+              throw new Error(`buildx failed with: ${res.stderr.match(/(.*)\s*$/)?.[0]?.trim() ?? 'unknown error'}`);
+            }
+          }),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), timeout))
+        ]);
+        error = null;
+      } catch (err) {
+        error = err;
+      }
+    }
+    if (!error) {
+      break;
+    }
+    currentAttempt++;
+  }
+
+  if (error) {
+    throw error;
+  }
+}
+
 actionsToolkit.run(
   // main
   async () => {
@@ -87,13 +120,9 @@ actionsToolkit.run(
     core.debug(`buildCmd.command: ${buildCmd.command}`);
     core.debug(`buildCmd.args: ${JSON.stringify(buildCmd.args)}`);
 
-    await Exec.getExecOutput(buildCmd.command, buildCmd.args, {
-      ignoreReturnCode: true
-    }).then(res => {
-      if (res.stderr.length > 0 && res.exitCode != 0) {
-        throw new Error(`buildx failed with: ${res.stderr.match(/(.*)\s*$/)?.[0]?.trim() ?? 'unknown error'}`);
-      }
-    });
+    const timeout = inputs['timeout-ms']
+    const maxAttempts = inputs['max-attempts']
+    await runWithRetryAndTimeout(maxAttempts, timeout, buildCmd);
 
     const imageID = toolkit.buildxBuild.resolveImageID();
     const metadata = toolkit.buildxBuild.resolveMetadata();
